@@ -1,0 +1,990 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AIS eBill Generator</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+  :root {
+    --green: #5cb85c;
+    --green-dark: #3b7d3b;
+    --green-light: #f4fbf4;
+    --green-mid: #4caa4c;
+    --orange: #e07b00;
+    --gray-dark: #333333;
+    --gray-mid: #666666;
+    --gray-light: #999999;
+    --gray-border: #e2e2e2;
+    --gray-bg: #f8f8f8;
+    --white: #ffffff;
+    --page-bg: #f0f2f0;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--page-bg);
+    color: var(--gray-dark);
+    min-height: 100vh;
+  }
+
+  /* ── TOOLBAR ── */
+  .toolbar {
+    background: var(--white);
+    border-bottom: 1px solid var(--gray-border);
+    padding: 12px 24px;
+    display: flex;
+    gap: 12px;
+    align-items: flex-end;
+    flex-wrap: wrap;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-shadow: 0 1px 8px rgba(0,0,0,0.06);
+  }
+
+  .toolbar-brand {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--green-dark);
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    margin-right: 8px;
+    align-self: center;
+    white-space: nowrap;
+  }
+
+  .tb-group {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .tb-group label {
+    font-size: 10px;
+    color: var(--gray-light);
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    font-weight: 500;
+  }
+
+  .tb-group select,
+  .tb-group input[type="text"] {
+    border: 1px solid var(--gray-border);
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    color: var(--gray-dark);
+    background: var(--white);
+    cursor: pointer;
+    outline: none;
+    transition: border-color .15s;
+  }
+
+  .tb-group select:focus,
+  .tb-group input[type="text"]:focus {
+    border-color: var(--green);
+  }
+
+  .btn {
+    border-radius: 6px;
+    padding: 7px 14px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all .15s;
+    white-space: nowrap;
+    align-self: flex-end;
+    height: 34px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .btn-green {
+    background: var(--green);
+    color: var(--white);
+    border: none;
+  }
+
+  .btn-green:hover { background: var(--green-mid); }
+  .btn-green:active { transform: scale(.97); }
+
+  .btn-outline {
+    background: transparent;
+    color: var(--green-dark);
+    border: 1px solid var(--green);
+  }
+
+  .btn-outline:hover { background: rgba(92,184,92,.07); }
+  .btn-outline:active { transform: scale(.97); }
+
+  .btn-print {
+    background: var(--gray-dark);
+    color: var(--white);
+    border: none;
+    margin-left: auto;
+  }
+
+  .btn-print:hover { background: #444; }
+  .btn-print:disabled { background: #999; cursor: not-allowed; opacity: .7; }
+
+  .pdf-progress {
+    display: none;
+    align-self: flex-end;
+    font-size: 12px;
+    color: var(--gray-light);
+    height: 34px;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .pdf-progress.active { display: flex; }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .spinner {
+    width: 14px; height: 14px;
+    border: 2px solid #ddd;
+    border-top-color: var(--green);
+    border-radius: 50%;
+    animation: spin .7s linear infinite;
+    flex-shrink: 0;
+  }
+
+  /* ── PAGE WRAPPER ── */
+  .page {
+    padding: 32px 20px 48px;
+    display: flex;
+    justify-content: center;
+  }
+
+  /* ── BILL CARD ── */
+  .bill {
+    background: var(--white);
+    border-radius: 10px;
+    border: 1px solid var(--gray-border);
+    width: 100%;
+    max-width: 720px;
+    overflow: hidden;
+  }
+
+  /* Header */
+  .bill-header {
+    background: var(--white);
+    padding: 18px 28px 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--gray-border);
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  .logo-area {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .logo-img-wrap {
+    height: 46px;
+    display: flex;
+    align-items: center;
+  }
+
+  .logo-img-wrap img {
+    max-height: 46px;
+    max-width: 160px;
+    object-fit: contain;
+  }
+
+  .hd-right { text-align: right; }
+
+  .hd-company {
+    font-size: 10.5px;
+    font-weight: 600;
+    color: var(--green);
+    text-transform: uppercase;
+    letter-spacing: .08em;
+  }
+
+  .hd-name {
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--gray-dark);
+    margin-top: 3px;
+  }
+
+  /* Body */
+  .bill-body { padding: 20px 28px; }
+
+  .meta-row {
+    display: flex;
+    gap: 36px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+
+  .meta-item { display: flex; flex-direction: column; gap: 2px; }
+
+  .meta-label {
+    font-size: 10.5px;
+    color: var(--gray-light);
+    text-transform: uppercase;
+    letter-spacing: .05em;
+  }
+
+  .meta-value {
+    font-size: 13.5px;
+    font-weight: 500;
+    color: var(--gray-dark);
+  }
+
+  /* Summary Table */
+  .sum-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 16px;
+    font-size: 12px;
+    border-radius: 7px;
+    overflow: hidden;
+    table-layout: fixed;
+  }
+
+  .sum-table thead tr { background: var(--green); }
+
+  .sum-table thead th {
+    color: var(--white);
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    padding: 9px 7px;
+    text-align: center;
+    line-height: 1.3;
+  }
+
+  .sum-table thead th:first-child { text-align: left; }
+
+  .sum-table tbody tr { background: var(--green-light); }
+
+  .sum-table tbody td {
+    padding: 13px 7px;
+    font-weight: 500;
+    font-size: 12.5px;
+    text-align: center;
+    color: var(--gray-dark);
+    border-bottom: 1px solid rgba(92,184,92,.1);
+    white-space: nowrap;
+  }
+
+  .sum-table tbody td:first-child {
+    text-align: left;
+    font-weight: 600;
+  }
+
+  .td-total {
+    color: var(--green-dark);
+    font-weight: 600;
+    font-size: 14px;
+  }
+
+  .td-due {
+    color: var(--orange);
+    font-weight: 600;
+  }
+
+  .zero-pill {
+    background: #e6f4e6;
+    color: var(--green-dark);
+    border-radius: 4px;
+    padding: 2px 9px;
+    font-size: 12px;
+    font-weight: 500;
+    display: inline-block;
+  }
+
+  /* Charges */
+  .charges {
+    background: var(--green-light);
+    border-radius: 7px;
+    border-left: 3px solid var(--green);
+    padding: 12px 14px;
+    margin-bottom: 16px;
+  }
+
+  .charges-title {
+    font-size: 10.5px;
+    font-weight: 600;
+    color: var(--green-dark);
+    text-transform: uppercase;
+    letter-spacing: .07em;
+    margin-bottom: 8px;
+  }
+
+  .charge-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 4px 0;
+    font-size: 12.5px;
+    color: #444;
+    border-bottom: .5px solid rgba(92,184,92,.12);
+  }
+
+  .charge-row:last-child { border-bottom: none; }
+
+  .cdot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--green);
+    flex-shrink: 0;
+    margin-top: 5px;
+  }
+
+  /* Promo */
+  .promo {
+    border-radius: 7px;
+    border: 1px solid var(--gray-border);
+    overflow: hidden;
+    margin-bottom: 16px;
+  }
+
+  .promo-bar {
+    background: #f5f5f5;
+    padding: 7px 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--gray-border);
+  }
+
+  .promo-bar-txt { font-size: 11.5px; color: #777; }
+
+  .promo-tag {
+    font-size: 10px;
+    font-weight: 600;
+    color: #555;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    background: #e6e6e6;
+    padding: 2px 9px;
+    border-radius: 3px;
+  }
+
+  .promo-body {
+    padding: 14px 16px;
+    display: grid;
+    grid-template-columns: 1fr 120px;
+    gap: 16px;
+    align-items: center;
+    background: var(--white);
+  }
+
+  .promo-title {
+    font-size: 13.5px;
+    font-weight: 600;
+    color: #222;
+    margin-bottom: 4px;
+    line-height: 1.35;
+  }
+
+  .promo-desc {
+    font-size: 12px;
+    color: #777;
+    line-height: 1.55;
+    margin-bottom: 7px;
+  }
+
+  .promo-price {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--green-dark);
+    margin-bottom: 1px;
+  }
+
+  .promo-note { font-size: 11px; color: #bbb; }
+
+  .promo-visual {
+    width: 120px;
+    height: 100px;
+    border-radius: 8px;
+    overflow: hidden;
+    flex-shrink: 0;
+    background: #f0f8f0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .promo-visual svg {
+    width: 120px;
+    height: 100px;
+  }
+
+  /* Footer */
+  .bill-footer {
+    border-top: 1px solid var(--gray-border);
+    padding: 11px 28px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .ft-txt { font-size: 11.5px; color: #aaa; }
+  .ft-link { color: var(--green-dark); font-weight: 500; text-decoration: none; }
+  .ft-link:hover { text-decoration: underline; }
+
+  .bill-base {
+    text-align: center;
+    font-size: 11px;
+    color: #ccc;
+    padding: 8px 0 10px;
+    background: var(--white);
+  }
+
+  /* ── PRINT STYLES ── */
+  @media print {
+    @page { margin: 14mm 16mm; size: A4; }
+    body { background: white; }
+    .toolbar { display: none !important; }
+    .page { padding: 0; }
+    .bill {
+      border: none;
+      border-radius: 0;
+      max-width: 100%;
+      box-shadow: none;
+    }
+    .promo-bar .promo-tag { display: none; }
+    .promo-bar .promo-bar-refresh { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<!-- TOOLBAR -->
+<div class="toolbar">
+  <span class="toolbar-brand">AIS eBill</span>
+
+  <!-- Month -->
+  <div class="tb-group">
+    <label>Bill Month</label>
+    <select id="billMonth"></select>
+  </div>
+
+  <!-- Year -->
+  <div class="tb-group">
+    <label>Year</label>
+    <select id="billYear"></select>
+  </div>
+
+  <!-- Amount -->
+  <div class="tb-group">
+    <label>Amount (THB)</label>
+    <input type="text" id="billAmount" value="3,500.00" style="width:110px">
+  </div>
+
+  <!-- Regen statement -->
+  <button class="btn btn-green" onclick="regenStatementManual()">
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M12 7a5 5 0 1 1-1.5-3.5" stroke="white" stroke-width="1.5" stroke-linecap="round"/><path d="M10.5 1.5v3h-3" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    New Statement No.
+  </button>
+
+  <!-- Next promo -->
+  <button class="btn btn-outline" onclick="nextPromo()">
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 7h10M8 3l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    Next Offer
+  </button>
+
+  <!-- PDF download -->
+  <button class="btn btn-print" id="pdfBtn" onclick="downloadPDF()">
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1v8M4 6l3 3 3-3" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M1 10v1.5A1.5 1.5 0 0 0 2.5 13h9a1.5 1.5 0 0 0 1.5-1.5V10" stroke="white" stroke-width="1.3" stroke-linecap="round" fill="none"/></svg>
+    Download PDF
+  </button>
+  <div class="pdf-progress" id="pdfProgress">
+    <div class="spinner"></div>
+    <span id="pdfProgressTxt">Generating…</span>
+  </div>
+</div>
+
+<!-- BILL PAGE -->
+<div class="page">
+  <div class="bill" id="billCard">
+
+    <!-- Header -->
+    <div class="bill-header">
+      <div class="logo-area">
+        <div class="logo-img-wrap" id="logoImgWrap">
+          <img id="uploadedLogo" src="data:image/png;base64,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" alt="AIS eBill Logo" style="max-height:46px; max-width:200px; object-fit:contain;">
+        </div>
+      </div>
+      <div class="hd-right">
+        <div class="hd-company">Intellect Design Arena Limited</div>
+        <div class="hd-name">Mr. Nagaraj Prasad Ravanasamudram</div>
+      </div>
+    </div>
+
+    <!-- Body -->
+    <div class="bill-body">
+
+      <!-- Meta -->
+      <div class="meta-row">
+        <div class="meta-item">
+          <span class="meta-label">AIS Postpaid Number</span>
+          <span class="meta-value">062-984-9334</span>
+        </div>
+        <div class="meta-item">
+          <span class="meta-label">Statement No.</span>
+          <span class="meta-value" id="stmtNo">—</span>
+        </div>
+      </div>
+
+      <!-- Summary table -->
+      <table class="sum-table">
+        <thead>
+          <tr>
+            <th>Bill Cycle</th>
+            <th>Current Charge (THB)</th>
+            <th>Outstanding Balance</th>
+            <th>Total Outstanding (THB)</th>
+            <th>Current Due Date</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td id="cycleCell">—</td>
+            <td id="chargeCell">3,500.00</td>
+            <td><span class="zero-pill">0.00</span></td>
+            <td class="td-total" id="totalCell">3,500.00</td>
+            <td class="td-due" id="dueCell">—</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- Charges breakdown -->
+      <div class="charges">
+        <div class="charges-title">Summary of Current Charges</div>
+        <div class="charge-row" id="usageRow"><span class="cdot"></span>5G usage – 28.1 GB</div>
+        <div class="charge-row"><span class="cdot"></span>Promotion contract minimum duration 6 months</div>
+        <div class="charge-row"><span class="cdot"></span>Early termination fee before 14/09/2026 – 3,500.00 Baht</div>
+        <div class="charge-row"><span class="cdot"></span>All inclusive fee</div>
+      </div>
+
+      <!-- Promotion -->
+      <div class="promo" id="promoSection">
+        <div class="promo-bar">
+          <span class="promo-bar-txt">Personalised offer for you</span>
+          <span class="promo-tag" id="promoTag">—</span>
+        </div>
+        <div class="promo-body">
+          <div>
+            <div class="promo-title" id="promoTitle">—</div>
+            <div class="promo-desc" id="promoDesc">—</div>
+            <div class="promo-price" id="promoPrice">—</div>
+            <div class="promo-note" id="promoNote">—</div>
+          </div>
+          <div class="promo-visual" id="promoIcon"></div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Footer -->
+    <div class="bill-footer">
+      <div class="ft-txt">
+        Pay online: <a class="ft-link" href="https://myais.ais.co.th">myais.ais.co.th</a>
+        &nbsp;·&nbsp;
+        AIS Fibre: <a class="ft-link" href="https://newfibre.ais.co.th/Payment/login">newfibre.ais.co.th</a>
+      </div>
+      <span class="ft-txt" id="footerStmt"></span>
+    </div>
+
+    <div class="bill-base">Thank you for helping us save the environment with AIS eBill</div>
+
+  </div>
+</div>
+
+<script>
+const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const MM2 = ['01','02','03','04','05','06','07','08','09','10','11','12'];
+
+// ── POPULATE SELECTORS ──
+const monthSel = document.getElementById('billMonth');
+const yearSel  = document.getElementById('billYear');
+const now = new Date();
+
+MONTHS.forEach((m, i) => {
+  const o = document.createElement('option');
+  o.value = i; o.textContent = m;
+  if (i === now.getMonth()) o.selected = true;
+  monthSel.appendChild(o);
+});
+
+for (let y = now.getFullYear() - 1; y <= now.getFullYear() + 3; y++) {
+  const o = document.createElement('option');
+  o.value = y; o.textContent = y;
+  if (y === now.getFullYear()) o.selected = true;
+  yearSel.appendChild(o);
+}
+
+// ── STATEMENT NUMBER ──
+// Format: W-IN-53-YYMM-XXXXXXX  e.g. July 2026 => W-IN-53-2607-1234567
+function genStmt(m, y) {
+  const r = Math.floor(1000000 + Math.random() * 9000000);
+  const yy = String(y).slice(2);
+  const mm = MM2[m];
+  return 'W-IN-53-' + yy + mm + '-' + r;
+}
+
+function regenStatement() {
+  const m = parseInt(monthSel.value);
+  const y = parseInt(yearSel.value);
+  const s = genStmt(m, y);
+  document.getElementById('stmtNo').textContent = s;
+  document.getElementById('footerStmt').textContent = 'Stmt: ' + s;
+
+  // Randomise 5G usage between 18.0 and 22.0 GB
+  const gb = (18 + Math.random() * 4).toFixed(1);
+  const row = document.getElementById('usageRow');
+  row.innerHTML = '';
+  const dot = document.createElement('span');
+  dot.className = 'cdot';
+  row.appendChild(dot);
+  row.appendChild(document.createTextNode('5G usage \u2013 ' + gb + ' GB'));
+
+  if (regenStatement.fromButton) {
+    const btn = document.querySelector('.btn-green');
+    const orig = btn.innerHTML;
+    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 7l4 4L12 3" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg> Generated';
+    setTimeout(function() { btn.innerHTML = orig; }, 1200);
+    regenStatement.fromButton = false;
+  }
+}
+regenStatement.fromButton = false;
+
+function regenStatementManual() {
+  regenStatement.fromButton = true;
+  regenStatement();
+}
+
+// ── BILL CYCLE & DUE DATE ──
+function updateBill() {
+  const m = parseInt(monthSel.value);
+  const y = parseInt(yearSel.value);
+  document.getElementById('cycleCell').textContent = `${MONTHS[m]} ${y}`;
+  document.getElementById('dueCell').textContent = `15/${MM2[m]}/${y}`;
+  regenStatement();
+}
+
+monthSel.addEventListener('change', updateBill);
+yearSel.addEventListener('change', updateBill);
+
+// ── AMOUNT SYNC ──
+document.getElementById('billAmount').addEventListener('input', function() {
+  const v = this.value.trim();
+  document.getElementById('chargeCell').textContent = v;
+  document.getElementById('totalCell').textContent = v;
+});
+
+// ── PROMOTIONS ──
+const promos = [
+  {
+    tag: '5G Upgrade',
+    title: 'Activate 5G — up to 2 Gbps on your device',
+    desc: 'Your current plan supports 5G. Unlock full speed and experience seamless streaming, instant downloads and zero buffering.',
+    price: 'From ฿599 / month',
+    note: 'Includes unlimited calls · 6-month minimum · VAT included',
+    visual: `<svg viewBox="0 0 120 100" xmlns="http://www.w3.org/2000/svg">
+      <rect width="120" height="100" fill="#f0faf0"/>
+      <rect x="42" y="14" width="36" height="62" rx="5" fill="#fff" stroke="#5cb85c" stroke-width="1.5"/>
+      <rect x="46" y="20" width="28" height="38" rx="2" fill="#e8f7e8"/>
+      <circle cx="60" cy="67" r="3" fill="#5cb85c" opacity=".5"/>
+      <text x="54" y="43" font-family="Helvetica,sans-serif" font-size="14" font-weight="700" fill="#5cb85c">5G</text>
+      <path d="M84 36 Q94 46 84 56" stroke="#5cb85c" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+      <path d="M89 30 Q103 46 89 62" stroke="#5cb85c" stroke-width="2" stroke-linecap="round" fill="none" opacity=".5"/>
+      <path d="M94 24 Q112 46 94 68" stroke="#5cb85c" stroke-width="1.5" stroke-linecap="round" fill="none" opacity=".25"/>
+      <line x1="32" y1="40" x2="22" y2="40" stroke="#5cb85c" stroke-width="2" stroke-linecap="round"/>
+      <line x1="35" y1="46" x2="18" y2="46" stroke="#5cb85c" stroke-width="1.5" stroke-linecap="round" opacity=".5"/>
+      <line x1="33" y1="52" x2="24" y2="52" stroke="#5cb85c" stroke-width="1" stroke-linecap="round" opacity=".3"/>
+    </svg>`
+  },
+  {
+    tag: 'Home Internet',
+    title: 'AIS Fibre — 1 Gbps symmetrical broadband',
+    desc: 'No throttling, no data caps, no fair-use policy. Connect every device in your home at full speed all day, every day.',
+    price: 'From ฿499 / month',
+    note: 'Unlimited data · Free installation · Free router',
+    visual: `<svg viewBox="0 0 120 100" xmlns="http://www.w3.org/2000/svg">
+      <rect width="120" height="100" fill="#f0faf0"/>
+      <rect x="38" y="52" width="44" height="26" rx="4" fill="#fff" stroke="#5cb85c" stroke-width="1.5"/>
+      <circle cx="50" cy="65" r="3" fill="#5cb85c" opacity=".7"/>
+      <circle cx="60" cy="65" r="3" fill="#5cb85c"/>
+      <circle cx="70" cy="65" r="3" fill="#5cb85c" opacity=".4"/>
+      <line x1="50" y1="52" x2="46" y2="38" stroke="#5cb85c" stroke-width="2" stroke-linecap="round"/>
+      <line x1="70" y1="52" x2="74" y2="38" stroke="#5cb85c" stroke-width="2" stroke-linecap="round"/>
+      <path d="M38 30 Q60 12 82 30" stroke="#5cb85c" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+      <path d="M44 38 Q60 24 76 38" stroke="#5cb85c" stroke-width="2" stroke-linecap="round" fill="none" opacity=".55"/>
+      <path d="M50 46 Q60 36 70 46" stroke="#5cb85c" stroke-width="1.5" stroke-linecap="round" fill="none" opacity=".3"/>
+      <circle cx="60" cy="52" r="2.5" fill="#5cb85c"/>
+    </svg>`
+  },
+  {
+    tag: 'APAC Roaming',
+    title: 'Roam across APAC — ฿99 flat daily rate',
+    desc: 'Thailand, Japan, Singapore, India, Vietnam, Indonesia and 20+ more. One fixed daily charge — use your local data allowance wherever you land.',
+    price: '฿99 / day',
+    note: 'Activate via myAIS before departure · No contract',
+    visual: `<svg viewBox="0 0 120 100" xmlns="http://www.w3.org/2000/svg">
+      <rect width="120" height="100" fill="#f0faf0"/>
+      <circle cx="60" cy="50" r="32" fill="#fff" stroke="#5cb85c" stroke-width="1.5"/>
+      <ellipse cx="60" cy="50" rx="14" ry="32" stroke="#5cb85c" stroke-width="1" fill="none" opacity=".5"/>
+      <line x1="28" y1="50" x2="92" y2="50" stroke="#5cb85c" stroke-width="1" opacity=".5"/>
+      <path d="M32 36 Q60 28 88 36" stroke="#5cb85c" stroke-width="1" fill="none" opacity=".4"/>
+      <path d="M32 64 Q60 72 88 64" stroke="#5cb85c" stroke-width="1" fill="none" opacity=".4"/>
+      <g transform="translate(52,22) rotate(-30)">
+        <path d="M0 0 L6 -3 L8 0 L6 3 Z" fill="#5cb85c"/>
+        <path d="M3 -1 L3 -6 L5 -6 L5 -1" fill="#5cb85c" opacity=".6"/>
+        <path d="M5 1 L5 5 L7 5 L7 1" fill="#5cb85c" opacity=".6"/>
+      </g>
+      <circle cx="88" cy="34" r="4" fill="#5cb85c" opacity=".8"/>
+      <circle cx="88" cy="34" r="8" stroke="#5cb85c" stroke-width="1" fill="none" opacity=".3"/>
+      <circle cx="34" cy="62" r="3" fill="#5cb85c" opacity=".5"/>
+      <circle cx="72" cy="72" r="3" fill="#5cb85c" opacity=".5"/>
+    </svg>`
+  },
+  {
+    tag: 'Europe Roaming',
+    title: 'Europe Ready — 35+ countries, one daily rate',
+    desc: 'UK, France, Germany, Italy, Spain and 30+ more. Stay connected on business trips or holidays without changing your SIM or plan.',
+    price: '฿149 / day',
+    note: 'Covers EU + UK · Activate via myAIS app',
+    visual: `<svg viewBox="0 0 120 100" xmlns="http://www.w3.org/2000/svg">
+      <rect width="120" height="100" fill="#f0faf0"/>
+      <circle cx="60" cy="50" r="30" fill="#fff" stroke="#5cb85c" stroke-width="1.5"/>
+      <path d="M38 28 Q48 22 54 30 Q58 36 52 40 Q46 44 50 52 Q54 60 48 66 Q42 72 36 66 Q28 58 30 48 Q32 38 38 28Z" fill="#e8f7e8" stroke="#5cb85c" stroke-width="1"/>
+      <path d="M62 24 Q70 20 76 28 Q82 36 78 44 Q74 52 80 58 Q86 64 82 70" stroke="#5cb85c" stroke-width="1" fill="none" opacity=".5"/>
+      <circle cx="46" cy="44" r="3" fill="#5cb85c"/>
+      <circle cx="68" cy="38" r="2.5" fill="#5cb85c" opacity=".6"/>
+      <circle cx="74" cy="56" r="2.5" fill="#5cb85c" opacity=".6"/>
+      <text x="52" y="88" font-family="Helvetica,sans-serif" font-size="8" fill="#5cb85c" font-weight="600" text-anchor="middle">35+ countries</text>
+    </svg>`
+  },
+  {
+    tag: 'Global Roaming',
+    title: 'AIS World Roam — 100+ countries covered',
+    desc: 'One plan, every continent. Americas, Middle East, Africa and beyond. Perfect for frequent international travellers who need total coverage.',
+    price: '฿199 / day',
+    note: 'Widest coverage · No SIM swap needed · Auto-activates',
+    visual: `<svg viewBox="0 0 120 100" xmlns="http://www.w3.org/2000/svg">
+      <rect width="120" height="100" fill="#f0faf0"/>
+      <circle cx="60" cy="50" r="32" fill="#fff" stroke="#5cb85c" stroke-width="1.5"/>
+      <ellipse cx="60" cy="50" rx="14" ry="32" stroke="#5cb85c" stroke-width="1" fill="none" opacity=".4"/>
+      <ellipse cx="60" cy="50" rx="32" ry="10" stroke="#5cb85c" stroke-width="1" fill="none" opacity=".4"/>
+      <line x1="28" y1="50" x2="92" y2="50" stroke="#5cb85c" stroke-width="1" opacity=".4"/>
+      <path d="M30 36 Q60 28 90 36" stroke="#5cb85c" stroke-width="1" fill="none" opacity=".3"/>
+      <path d="M30 64 Q60 72 90 64" stroke="#5cb85c" stroke-width="1" fill="none" opacity=".3"/>
+      <circle cx="60" cy="50" r="6" fill="#5cb85c" opacity=".15"/>
+      <circle cx="60" cy="50" r="3" fill="#5cb85c"/>
+      <line x1="60" y1="47" x2="60" y2="18" stroke="#5cb85c" stroke-width="1.5" stroke-linecap="round"/>
+      <circle cx="60" cy="16" r="4" fill="#5cb85c"/>
+      <path d="M56 14 l2 2 l4-4" stroke="white" stroke-width="1.3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>`
+  },
+  {
+    tag: 'Roam Data Pack',
+    title: 'Roaming Data Pack — 3 GB for 7 days',
+    desc: 'Heading overseas? Top up with a dedicated roaming data block. Valid across 50+ countries for 7 days. Great value for short trips.',
+    price: '฿350 / 7 days',
+    note: '3 GB data · 50+ countries · Purchase once, use anywhere',
+    visual: `<svg viewBox="0 0 120 100" xmlns="http://www.w3.org/2000/svg">
+      <rect width="120" height="100" fill="#f0faf0"/>
+      <rect x="30" y="24" width="60" height="52" rx="6" fill="#fff" stroke="#5cb85c" stroke-width="1.5"/>
+      <rect x="36" y="30" width="48" height="6" rx="2" fill="#e8f7e8"/>
+      <text x="60" y="35" font-family="Helvetica,sans-serif" font-size="6" font-weight="700" fill="#3b7d3b" text-anchor="middle">ROAMING DATA PACK</text>
+      <text x="60" y="52" font-family="Helvetica,sans-serif" font-size="18" font-weight="700" fill="#5cb85c" text-anchor="middle">3GB</text>
+      <text x="60" y="63" font-family="Helvetica,sans-serif" font-size="8" fill="#888" text-anchor="middle">valid 7 days</text>
+      <path d="M38 72 Q60 66 82 72" stroke="#5cb85c" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+      <g transform="translate(56,18) rotate(-15)">
+        <path d="M0 0 L5 -2.5 L7 0 L5 2.5 Z" fill="#5cb85c" opacity=".7"/>
+      </g>
+    </svg>`
+  },
+  {
+    tag: 'Best Value Bundle',
+    title: 'AIS Triple Play — Mobile + Fibre + AIS PLAY',
+    desc: 'Bundle your postpaid line with home broadband and AIS PLAY streaming. One bill, one provider, significant monthly savings.',
+    price: 'From ฿1,199 / month',
+    note: '3 services on one invoice · Priority support line',
+    visual: `<svg viewBox="0 0 120 100" xmlns="http://www.w3.org/2000/svg">
+      <rect width="120" height="100" fill="#f0faf0"/>
+      <rect x="12" y="28" width="24" height="42" rx="3.5" fill="#fff" stroke="#5cb85c" stroke-width="1.5"/>
+      <rect x="15" y="33" width="18" height="26" rx="1.5" fill="#e8f7e8"/>
+      <text x="19" y="49" font-family="Helvetica,sans-serif" font-size="8" font-weight="700" fill="#5cb85c">5G</text>
+      <rect x="48" y="42" width="26" height="18" rx="3" fill="#fff" stroke="#5cb85c" stroke-width="1.5"/>
+      <path d="M39 30 Q61 18 83 30" stroke="#5cb85c" stroke-width="1.8" stroke-linecap="round" fill="none"/>
+      <path d="M44 37 Q61 27 78 37" stroke="#5cb85c" stroke-width="1.3" fill="none" opacity=".5"/>
+      <circle cx="61" cy="42" r="2" fill="#5cb85c"/>
+      <circle cx="55" cy="53" r="2.5" fill="#5cb85c" opacity=".6"/>
+      <circle cx="61" cy="53" r="2.5" fill="#5cb85c"/>
+      <circle cx="67" cy="53" r="2.5" fill="#5cb85c" opacity=".35"/>
+      <rect x="84" y="28" width="26" height="20" rx="2.5" fill="#fff" stroke="#5cb85c" stroke-width="1.5"/>
+      <polygon points="92,33 92,42 99,37.5" fill="#5cb85c"/>
+      <line x1="36" y1="50" x2="48" y2="52" stroke="#5cb85c" stroke-width="1" stroke-dasharray="2,2" opacity=".5"/>
+      <line x1="74" y1="52" x2="84" y2="40" stroke="#5cb85c" stroke-width="1" stroke-dasharray="2,2" opacity=".5"/>
+    </svg>`
+  },
+  {
+    tag: '5G Unlimited',
+    title: '5G Max — unlimited data, no cap, no throttle',
+    desc: 'Full 5G speeds all month. Hotspot sharing included for all your devices. No fair-use threshold — consistent performance guaranteed.',
+    price: '฿899 / month',
+    note: 'Unlimited · Hotspot included · Priority network access',
+    visual: `<svg viewBox="0 0 120 100" xmlns="http://www.w3.org/2000/svg">
+      <rect width="120" height="100" fill="#f0faf0"/>
+      <line x1="60" y1="20" x2="52" y2="80" stroke="#5cb85c" stroke-width="2" stroke-linecap="round"/>
+      <line x1="60" y1="20" x2="68" y2="80" stroke="#5cb85c" stroke-width="2" stroke-linecap="round"/>
+      <line x1="54" y1="50" x2="66" y2="50" stroke="#5cb85c" stroke-width="1.5"/>
+      <line x1="52" y1="65" x2="68" y2="65" stroke="#5cb85c" stroke-width="1.5"/>
+      <path d="M26 44 Q60 18 94 44" stroke="#5cb85c" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+      <path d="M33 54 Q60 30 87 54" stroke="#5cb85c" stroke-width="2" stroke-linecap="round" fill="none" opacity=".55"/>
+      <path d="M40 64 Q60 44 80 64" stroke="#5cb85c" stroke-width="1.5" stroke-linecap="round" fill="none" opacity=".3"/>
+      <circle cx="22" cy="68" r="5" fill="#5cb85c" opacity=".7"/>
+      <circle cx="98" cy="68" r="5" fill="#5cb85c" opacity=".7"/>
+      <circle cx="60" cy="82" r="5" fill="#5cb85c" opacity=".5"/>
+      <circle cx="60" cy="20" r="6" fill="#5cb85c"/>
+      <path d="M57 20 l2 2 l4-4" stroke="white" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>`
+  },
+  {
+    tag: 'Device Protection',
+    title: 'AIS Device Care — screen, damage & theft cover',
+    desc: 'Protect your smartphone against accidental damage, cracked screens and theft. Same-day replacement at AIS service centres across Thailand.',
+    price: '฿129 / month',
+    note: 'Covers all phone models · No excess on first claim',
+    visual: `<svg viewBox="0 0 120 100" xmlns="http://www.w3.org/2000/svg">
+      <rect width="120" height="100" fill="#f0faf0"/>
+      <rect x="38" y="14" width="44" height="68" rx="6" fill="#fff" stroke="#5cb85c" stroke-width="1.5"/>
+      <rect x="42" y="20" width="36" height="50" rx="3" fill="#e8f7e8"/>
+      <path d="M50 45 L58 53 L72 38" stroke="#5cb85c" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M44 14 Q60 6 76 14" stroke="#5cb85c" stroke-width="2" fill="none" stroke-linecap="round" opacity=".4"/>
+      <path d="M40 10 Q60 0 80 10" stroke="#5cb85c" stroke-width="1.5" fill="none" stroke-linecap="round" opacity=".2"/>
+      <circle cx="60" cy="74" r="3" fill="#5cb85c" opacity=".5"/>
+    </svg>`
+  }
+];
+
+let promoIdx = Math.floor(Math.random() * promos.length);
+
+function renderPromo(p) {
+  document.getElementById('promoTag').textContent   = p.tag;
+  document.getElementById('promoTitle').textContent = p.title;
+  document.getElementById('promoDesc').textContent  = p.desc;
+  document.getElementById('promoPrice').textContent = p.price;
+  document.getElementById('promoNote').textContent  = p.note;
+  document.getElementById('promoIcon').innerHTML    = p.visual;
+}
+
+function nextPromo() {
+  promoIdx = (promoIdx + 1) % promos.length;
+  renderPromo(promos[promoIdx]);
+}
+
+// ── PDF DOWNLOAD ──
+async function downloadPDF() {
+  const btn = document.getElementById('pdfBtn');
+  const progress = document.getElementById('pdfProgress');
+  const progressTxt = document.getElementById('pdfProgressTxt');
+  const bill = document.getElementById('billCard');
+
+  btn.disabled = true;
+  progress.classList.add('active');
+  progressTxt.textContent = 'Rendering bill…';
+
+  // Temporarily hide toolbar-only elements inside bill (none — all controls are outside)
+  // Make sure bill has white bg and no border-radius for clean capture
+  const origBorderRadius = bill.style.borderRadius;
+  bill.style.borderRadius = '0';
+
+  await new Promise(r => setTimeout(r, 80)); // let DOM settle
+
+  progressTxt.textContent = 'Capturing…';
+
+  try {
+    const canvas = await html2canvas(bill, {
+      scale: 2.5,
+      useCORS: true,
+      allowTaint: true,
+      backgroundColor: '#ffffff',
+      logging: false,
+      windowWidth: bill.scrollWidth,
+      windowHeight: bill.scrollHeight,
+      onclone: (doc) => {
+        // In the clone, ensure SVG logos render
+        const svgs = doc.querySelectorAll('svg');
+        svgs.forEach(s => {
+          if (!s.getAttribute('xmlns')) s.setAttribute('xmlns','http://www.w3.org/2000/svg');
+        });
+      }
+    });
+
+    bill.style.borderRadius = origBorderRadius;
+
+    progressTxt.textContent = 'Building PDF…';
+    await new Promise(r => setTimeout(r, 30));
+
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+
+    const pageW = 210; // A4 mm
+    const pageH = 297;
+    const margin = 12;
+    const usableW = pageW - margin * 2;
+
+    const imgW = canvas.width;
+    const imgH = canvas.height;
+    const ratio = imgH / imgW;
+    const pdfImgW = usableW;
+    const pdfImgH = pdfImgW * ratio;
+
+    const imgData = canvas.toDataURL('image/jpeg', 0.97);
+
+    // Centre vertically if shorter than page
+    const yOffset = pdfImgH < (pageH - margin * 2) ? margin + ((pageH - margin * 2 - pdfImgH) / 2) : margin;
+
+    pdf.addImage(imgData, 'JPEG', margin, yOffset, pdfImgW, pdfImgH);
+
+    // Filename
+    const m = parseInt(document.getElementById('billMonth').value);
+    const y = document.getElementById('billYear').value;
+    const mn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m];
+    pdf.save(`AIS_eBill_${mn}_${y}.pdf`);
+
+    progressTxt.textContent = 'Done!';
+    setTimeout(() => {
+      progress.classList.remove('active');
+      btn.disabled = false;
+    }, 1500);
+
+  } catch(err) {
+    bill.style.borderRadius = origBorderRadius;
+    progress.classList.remove('active');
+    btn.disabled = false;
+    alert('PDF generation failed: ' + err.message);
+  }
+}
+
+// ── INIT ──
+updateBill();
+renderPromo(promos[promoIdx]);
+</script>
+</body>
+</html>
